@@ -1,0 +1,105 @@
+---
+title: "CTRing"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{CTRing}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  eval = FALSE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(CTRing)
+```
+
+The first step is to import an image of a disk obtained from a CT scanner. These are often in dicom (or dcm) formats.
+
+```{r}
+library(oro.dicom)
+file_path <- system.file("extdata", "disk.dcm", package = "CTRing")
+dcm <-  readDICOM(file_path)
+```
+
+The next step is to obtain the information in the image header in order to determine pixel size and gray scale used by the CT scanner
+
+```{r}
+hdr_df <- dcm$hdr[[1]]
+image_info <- getImageInfo(hdr = hdr_df)
+```
+
+The image has to be converted to a matrix, the gray scale converted to 8bit gray scale and finaly the calibration curve applied to the gray scale to obtain the density matrix of the CT scan image.
+
+```{r}
+im <- imageToMatrix(dcm$img)
+im_8bit <- xBitTo8Bit(im, image_info$grayScale)
+im_dens <- grayToDensity(im_8bit)
+```
+
+The pith is then detected and checked.
+
+```{r}
+pith_coord <- detect_pith(im_dens, pixel = TRUE, toPlot = FALSE)
+pith_coord_checked <- verifyPith(im_dens, pith_coord)
+```
+
+Once the pith is located, the end of the path for the density profile is set either manually or by clicking on the image.
+
+```{r}
+endPath <- c(472, 284) # manual
+endPath <- locatePathEnd(im_dens, pith_coord_checked) # using the image
+```
+
+The pith to bark density profile is then extracted, and can be visualized.
+
+```{r}
+path <- extractProfile(im_dens, image_info, pith_coord, endPath, k = 2, r = 5, threshold = 0.002)
+```
+
+The profile can be visualized, and rings can be added or removed.
+
+```
+plotProfile(path)
+
+newPath <- addRingFromProfile(n = 1, path)
+oldPath <- deleteRingFromProfile(n = 1, newPath)
+```
+
+The location of the ring transition points can be visualized on the CT scan image, with and corrections can also be made on the image.
+
+```{r}
+plotImageProfile(path, im_dens)
+
+newPath2 <- addRingFromImage(n = 1, path, im_dens)
+oldPath2 <- deleteRingFromImage(n = 1, path, im_dens)
+
+```
+
+Earlywood to latewood transition points can then be obtained, and the profile with the transition points can be visualized.
+
+```{r}
+path <- getEwLw(path)
+plotProfile(path)
+```
+
+Other operations on the profile can also be done (add years to rings, remove last ring, calculate average ring width and density, and if present earlywood and latewood widths and densities).
+
+```{r}
+path <- getEwLw(path)
+path <- calcAvgDens(path)
+path <- addYears(2021, path)
+path <- removeLastYear(path)
+```
+
+Finally, there is a function to convert the list to a data frame for further analysis.
+
+```{r}
+densityDf <- densityDataFrame(path)
+```
+
